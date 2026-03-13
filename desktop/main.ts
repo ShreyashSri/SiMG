@@ -45,11 +45,11 @@ ipcMain.handle('start-pipeline', async (event, dicomPath: string) => {
         const refSimg = path.join(tempDir, 'ref.simg');
         const convertedPng = path.join(tempDir, 'converted.png');
 
-        // Resolve project root — app.getAppPath() returns the desktop/ dir (where package.json is).
-        // All sibling assets (fingerprint/, converter/, keys/, sandbox/) live one level up at SiMG/.
+        // In dev, __dirname is desktop/dist-ts. So desktopDir is __dirname/.. = desktop/
+        // When packaged, getPath('exe') is the executable path, so dirname is the app folder.
         const desktopDir = app.isPackaged
             ? path.dirname(app.getPath('exe'))
-            : app.getAppPath();
+            : path.join(__dirname, '..');
         const repoRoot = path.join(desktopDir, '..');
 
         const anchorBin = path.join(repoRoot, 'fingerprint', 'anchor', 'build', 'anchor');
@@ -128,25 +128,26 @@ ipcMain.handle('start-pipeline', async (event, dicomPath: string) => {
                 proc.on('close', (code) => {
                     if (code !== 0) {
                         event.sender.send('log', `[GUARDIAN] ERROR: Sandbox1 exited with code ${code}`);
-                        return resolve({ type: 'PIPELINE_ERROR', reason: `Sandbox1 exited with code ${code}` });
                     }
 
-                    // Scan all output lines for valid JSON (robust against noisy trailing output)
+                    // Scan all output lines for valid JSON from the bottom up
                     let verdictJson: any = null;
-                    for (const outputLine of allLines) {
-                        try { verdictJson = JSON.parse(outputLine); break; } catch { }
+                    for (let i = allLines.length - 1; i >= 0; i--) {
+                        try { verdictJson = JSON.parse(allLines[i]); break; } catch { }
                     }
-                    if (!verdictJson) {
-                        return resolve({ type: 'PIPELINE_ERROR', reason: 'Verifier produced no parseable JSON verdict' });
+
+                    if (verdictJson) {
+                        const verdictType = verdictJson.verdict === 'PASS' ? 'PASS' : 'SECURITY_FAILURE';
+                        return resolve({
+                            type: verdictType,
+                            score: verdictJson.score,
+                            phash_score: verdictJson.phash_score,
+                            ring_score: verdictJson.ring_score,
+                            hist_score: verdictJson.hist_score
+                        });
+                    } else {
+                        return resolve({ type: 'PIPELINE_ERROR', reason: `Sandbox1 exited with code ${code} (No JSON)` });
                     }
-                    const verdictType = verdictJson.verdict === 'PASS' ? 'PASS' : 'SECURITY_FAILURE';
-                    resolve({
-                        type: verdictType,
-                        score: verdictJson.score,
-                        phash_score: verdictJson.phash_score,
-                        ring_score: verdictJson.ring_score,
-                        hist_score: verdictJson.hist_score
-                    });
                 });
 
                 proc.on('error', (err) => {

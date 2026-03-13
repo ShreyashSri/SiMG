@@ -41,6 +41,12 @@ venv.bak/
 *.png
 *.DCM
 
+# Build outputs
+desktop/dist-ts/
+desktop/renderer/bundle.js
+desktop/renderer/bundle.js.map
+desktop/.webpack_cache/
+
 # OS and IDEs
 .vscode/
 .idea/

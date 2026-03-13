@@ -259,9 +259,11 @@ export default function App() {
                         )}
 
                         <button
-                            onClick={(e) => { e.stopPropagation(); handleRun(); }}
+                            onClick={(e) => { e.preventDefault(); e.stopPropagation(); handleRun(); }}
                             disabled={!file || isRunning}
                             style={{
+                                position: 'relative',
+                                zIndex: 10,
                                 marginTop: '16px',
                                 backgroundColor: !file || isRunning ? colors.border : colors.primary,
                                 color: 'white',

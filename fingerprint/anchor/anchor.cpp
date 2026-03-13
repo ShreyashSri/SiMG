@@ -19,7 +19,7 @@ int main(int argc, char* argv[]) {
     try {
         // 1. Parse DICOM tags + raw pixel bytes
         DicomTags tags = parse_dicom(dicom_path);
-        std::cerr << "[ANCHOR] DICOM parsed: " << tags.cols << "x" << tags.rows << "\n";
+        std::cout << "[ANCHOR] DICOM parsed: " << tags.cols << "x" << tags.rows << "\n";
 
         // 2. Apply modality LUT + windowing → 8-bit grayscale
         std::vector<uint8_t> pixels = apply_dicom_windowing(tags);
@@ -32,7 +32,7 @@ int main(int argc, char* argv[]) {
 
         // 4. Write .simg
         write_simg(data, key_path, output_path);
-        std::cerr << "[ANCHOR] SIMG written: " << output_path << "\n";
+        std::cout << "[ANCHOR] SIMG written: " << output_path << "\n";
 
         // 5. JSON stdout
         nlohmann::json out;
