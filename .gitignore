@@ -1,0 +1,6 @@
+keys/private.pem
+.tmpfs/
+node_modules/
+build/
+*.o
+*.a
