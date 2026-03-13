@@ -8,5 +8,18 @@
         "strict": true,
         "esModuleInterop": true,
         "skipLibCheck": true
-    }
+    },
+    "include": [
+        "*.ts",
+        "electron/**/*.ts",
+        "electron/**/*.tsx",
+        "renderer/**/*.ts",
+        "renderer/**/*.tsx"
+    ],
+    "exclude": [
+        "node_modules",
+        "dist",
+        "dist-ts",
+        "webpack.config.js"
+    ]
 }
