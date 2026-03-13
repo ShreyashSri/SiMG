@@ -1,4 +1,4 @@
-# DICOM Guardian (SiMG)
+# SiMG
 
 A cross-platform Electron application that cryptographically verifies medical DICOM images before they reach an AI inference model, catching supply chain attacks, adversarial converter compromises, and pipeline failures as two distinct, separately surfaced error classes.
 
@@ -100,9 +100,9 @@ $$\text{score} = 0.4 \times s_{\text{pHash}} + 0.3 \times s_{\text{rings}} + 0.3
 
 | Component | Metric | Score formula |
 |---|---|---|
-| pHash | Hamming distance | $\max(0,\ 1 - d_H / \tau_H)$ |
-| Ring descriptors | Max zone deviation | $\max(0,\ 1 - \delta_R / \tau_R)$ |
-| Histogram | Symmetric KL divergence | $\max(0,\ 1 - D_{KL} / \tau_{KL})$ |
+| pHash | Hamming distance
+| Ring descriptors | Max zone deviation
+| Histogram | Symmetric KL divergence
 
 **Threshold: 0.85** — score below this halts the pipeline with `[GUARDIAN] SECURITY FAILURE — COMPROMISED CONVERTER DETECTED`.
 
