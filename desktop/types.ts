@@ -13,3 +13,8 @@ export interface GuardianAPI {
     onVerdict: (callback: (data: VerdictPayload) => void) => void;
     removeAllListeners: () => void;
 }
+
+/** Electron extends the browser File object with a `path` property. */
+export interface ElectronFile extends File {
+    path: string;
+}

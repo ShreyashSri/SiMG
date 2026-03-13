@@ -41,13 +41,18 @@ ipcMain.handle('start-pipeline', async (event, dicomPath: string) => {
         const refSimg = path.join(tempDir, 'ref.simg');
         const convertedPng = path.join(tempDir, 'converted.png');
 
-        // Setting executable paths relative to the desktop folder
-        const baseDir = path.join(__dirname, '..', '..');
-        const anchorBin = path.join(baseDir, 'cpp', 'anchor', 'build', 'anchor');
-        const converterScript = path.join(baseDir, 'converter', 'converter.py');
-        const sandbox1Script = path.join(baseDir, 'sandbox1', 'run.sh');
-        const privKey = path.join(baseDir, 'keys', 'private.pem');
-        const pubKey = path.join(baseDir, 'keys', 'public.pem');
+        // Resolve project root — app.getAppPath() returns the desktop/ dir (where package.json is).
+        // All sibling assets (fingerprint/, converter/, keys/, sandbox/) live one level up at SiMG/.
+        const desktopDir = app.isPackaged
+            ? path.dirname(app.getPath('exe'))
+            : app.getAppPath();
+        const repoRoot = path.join(desktopDir, '..');
+
+        const anchorBin = path.join(repoRoot, 'fingerprint', 'anchor', 'build', 'anchor');
+        const converterScript = path.join(repoRoot, 'converter', 'converter.py');
+        const sandboxScript = path.join(repoRoot, 'sandbox', 'verification-enclosure', 'run.sh');
+        const privKey = path.join(repoRoot, 'keys', 'private.pem');
+        const pubKey = path.join(repoRoot, 'keys', 'public.pem');
 
         // Helper process runner used for Stage 1
         const runProcess = (cmd: string, args: string[], prefix: string): Promise<void> => {
@@ -98,14 +103,14 @@ ipcMain.handle('start-pipeline', async (event, dicomPath: string) => {
         // --- Stage 2 ---
         const runSandbox1 = (): Promise<VerdictPayload> => {
             return new Promise((resolve) => {
-                let lastLine = '';
-                const proc = child_process.spawn('bash', [sandbox1Script, convertedPng, refSimg, pubKey], { stdio: ['ignore', 'pipe', 'pipe'] });
+                const allLines: string[] = [];
+                const proc = child_process.spawn('bash', [sandboxScript, convertedPng, refSimg, pubKey], { stdio: ['ignore', 'pipe', 'pipe'] });
 
                 proc.stdout.on('data', (data) => {
                     const lines = data.toString().split('\n').filter((l: string) => l.trim() !== '');
                     for (const line of lines) {
                         event.sender.send('log', `[SANDBOX1] ${line}`);
-                        lastLine = line; // capture the last line (verdict JSON)
+                        allLines.push(line); // accumulate all lines for JSON scanning
                     }
                 });
 
@@ -122,19 +127,22 @@ ipcMain.handle('start-pipeline', async (event, dicomPath: string) => {
                         return resolve({ type: 'PIPELINE_ERROR', reason: `Sandbox1 exited with code ${code}` });
                     }
 
-                    try {
-                        const parsed = JSON.parse(lastLine);
-                        const verdictType = parsed.verdict === 'PASS' ? 'PASS' : 'SECURITY_FAILURE';
-                        resolve({
-                            type: verdictType,
-                            score: parsed.score,
-                            phash_score: parsed.phash_score,
-                            ring_score: parsed.ring_score,
-                            hist_score: parsed.hist_score
-                        });
-                    } catch (err: any) {
-                        resolve({ type: 'PIPELINE_ERROR', reason: `Failed to parse verifier output JSON: ${err.message}` });
+                    // Scan all output lines for valid JSON (robust against noisy trailing output)
+                    let verdictJson: any = null;
+                    for (const outputLine of allLines) {
+                        try { verdictJson = JSON.parse(outputLine); break; } catch { }
                     }
+                    if (!verdictJson) {
+                        return resolve({ type: 'PIPELINE_ERROR', reason: 'Verifier produced no parseable JSON verdict' });
+                    }
+                    const verdictType = verdictJson.verdict === 'PASS' ? 'PASS' : 'SECURITY_FAILURE';
+                    resolve({
+                        type: verdictType,
+                        score: verdictJson.score,
+                        phash_score: verdictJson.phash_score,
+                        ring_score: verdictJson.ring_score,
+                        hist_score: verdictJson.hist_score
+                    });
                 });
 
                 proc.on('error', (err) => {

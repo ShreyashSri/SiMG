@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { VerdictPayload } from '../types';
+import { VerdictPayload, ElectronFile } from '../types';
 
 export default function App() {
     const [file, setFile] = useState<File | null>(null);
@@ -11,6 +11,8 @@ export default function App() {
     const [currentStage, setCurrentStage] = useState<number>(0);
 
     const logEndRef = useRef<HTMLDivElement>(null);
+    // stageRef keeps stage value accessible inside IPC callbacks without stale closure
+    const stageRef = useRef(0);
 
     useEffect(() => {
         // Auto-scroll logs
@@ -19,6 +21,9 @@ export default function App() {
         }
     }, [logs]);
 
+    // Keep stageRef in sync with currentStage so IPC callbacks read the latest value
+    useEffect(() => { stageRef.current = currentStage; }, [currentStage]);
+
     useEffect(() => {
         if (isRunning) {
             window.guardian.removeAllListeners();
@@ -26,10 +31,10 @@ export default function App() {
             window.guardian.onLog((line) => {
                 setLogs(prev => [...prev, line]);
 
-                // Infer stage progression from logs
-                if (currentStage < 1 && (line.includes('[ANCHOR]') || line.includes('[CONVERTER]'))) setCurrentStage(1);
-                if (currentStage < 2 && (line.includes('[VERIFIER]') || line.includes('[SANDBOX1]'))) setCurrentStage(2);
-                if (currentStage < 3 && line.includes('[MONAI]')) setCurrentStage(3);
+                // Use stageRef (not currentStage) to avoid stale closure
+                if (stageRef.current < 1 && (line.includes('[ANCHOR]') || line.includes('[CONVERTER]'))) setCurrentStage(1);
+                if (stageRef.current < 2 && (line.includes('[VERIFIER]') || line.includes('[SANDBOX1]'))) setCurrentStage(2);
+                if (stageRef.current < 3 && line.includes('[MONAI]')) setCurrentStage(3);
             });
 
             window.guardian.onVerdict((data) => {
@@ -40,7 +45,7 @@ export default function App() {
         }
 
         return () => {
-            if (!isRunning) window.guardian.removeAllListeners();
+            window.guardian.removeAllListeners(); // always clean up on every effect re-run
         };
     }, [isRunning]);
 
@@ -62,9 +67,9 @@ export default function App() {
         setLogs([]);
         setVerdict(null);
         setCurrentStage(0);
+        stageRef.current = 0;
         setIsRunning(true);
-        // @ts-ignore path exists on File in Electron
-        window.guardian.startPipeline(file.path);
+        window.guardian.startPipeline((file as ElectronFile).path);
     };
 
     // Theming constants
@@ -112,18 +117,19 @@ export default function App() {
     };
 
     const ScoreBar = ({ label, scoreStr }: { label: string, scoreStr?: number }) => {
-        const score = typeof scoreStr === 'number' ? scoreStr : 0;
-        const width = `${Math.min(100, Math.max(0, score * 100))}%`;
+        const isDefined = typeof scoreStr === 'number';
+        const score = isDefined ? scoreStr : 0;
+        const width = isDefined ? `${Math.min(100, Math.max(0, score * 100))}%` : '0%';
         const barColor = score >= 0.85 ? colors.pass : colors.fail;
 
         return (
             <div style={{ marginBottom: '10px' }}>
                 <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.85rem', marginBottom: '4px' }}>
                     <span>{label}</span>
-                    <span>{score.toFixed(3)}</span>
+                    <span style={{ opacity: isDefined ? 1 : 0.4 }}>{isDefined ? score.toFixed(3) : 'N/A'}</span>
                 </div>
                 <div style={{ width: '100%', height: '8px', background: colors.border, borderRadius: '4px', overflow: 'hidden' }}>
-                    {verdict ? (
+                    {(verdict && isDefined) ? (
                         <div style={{
                             height: '100%',
                             width: width,

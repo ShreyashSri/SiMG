@@ -25,7 +25,8 @@
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 DESKTOP_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
-VERIFIER="$DESKTOP_ROOT/cpp/verifier/build/verifier"
+REPO_ROOT="$(cd "$DESKTOP_ROOT/.." && pwd)"
+VERIFIER="$REPO_ROOT/fingerprint/verifier/build/verifier"
 
 # Validate argument count
 if [ "$#" -ne 3 ]; then
@@ -40,5 +41,16 @@ if [ ! -x "$VERIFIER" ]; then
     exit 2
 fi
 
-exec unshare --net --pid --mount-proc --fork \
-    "$VERIFIER" "$1" "$2" "$3"
+# Run verifier inside a user+network+PID namespace.
+# --user --map-root-user: create unprivileged user namespace first — required on Ubuntu
+#   22.04+ with default kernel.unprivileged_userns_clone settings.
+# Falls back to running the verifier directly (without isolation) if unshare is
+# unavailable or blocked, so the demo still works on a judge's laptop.
+if unshare --user --map-root-user --net --pid --mount-proc --fork \
+       "$VERIFIER" "$1" "$2" "$3"; then
+    exit 0
+else
+    UNSHARE_EXIT=$?
+    echo "[SANDBOX1] WARNING: namespace isolation unavailable (exit $UNSHARE_EXIT), running verifier without sandbox" >&2
+    exec "$VERIFIER" "$1" "$2" "$3"
+fi

@@ -2,7 +2,7 @@
     "name": "dicom-guardian",
     "version": "1.0.0",
     "description": "DICOM Guardian Desktop Application",
-    "main": "dist-ts/electron/main.js",
+    "main": "dist-ts/main.js",
     "scripts": {
         "build:ts": "tsc",
         "build:react": "webpack --config webpack.config.js",
@@ -41,19 +41,23 @@
         },
         "extraFiles": [
             {
-                "from": "cpp/anchor/build/anchor",
-                "to": "cpp/anchor/build/anchor"
+                "from": "../fingerprint/anchor/build/anchor",
+                "to": "fingerprint/anchor/build/anchor"
             },
             {
-                "from": "cpp/verifier/build/verifier",
-                "to": "cpp/verifier/build/verifier"
+                "from": "../fingerprint/verifier/build/verifier",
+                "to": "fingerprint/verifier/build/verifier"
             },
             {
-                "from": "sandbox1/run.sh",
-                "to": "sandbox1/run.sh"
+                "from": "../sandbox/verification-enclosure/run.sh",
+                "to": "sandbox/verification-enclosure/run.sh"
             },
             {
-                "from": "keys/public.pem",
+                "from": "../converter",
+                "to": "converter"
+            },
+            {
+                "from": "../keys/public.pem",
                 "to": "keys/public.pem"
             }
         ],
