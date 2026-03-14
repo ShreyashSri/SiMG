@@ -251,7 +251,7 @@ export default function App() {
                     fontWeight: 'bold'
                 }}
             >
-                Evil
+                Tampered
             </button>
         </div>
     );
