@@ -2,13 +2,15 @@ import sys
 import json
 import os
 import random
+from pathlib import Path
 import numpy as np
 from PIL import Image
 from google import genai
+from google.genai import errors as genai_errors
 from dotenv import load_dotenv
 
-# Load environment variables
-load_dotenv()
+# Load environment variables from the local inference pipeline config.
+load_dotenv(Path(__file__).with_name(".env"), override=True)
 
 class ModelInferenceOperator:
     """
@@ -17,10 +19,11 @@ class ModelInferenceOperator:
     """
     def compute(self, op_input):
         image_path = op_input
-        # Load API key, fallback to a dummy if None
-        api_key = os.environ.get("GEMINI_API_KEY")
+        api_key = (os.environ.get("GEMINI_API_KEY") or os.environ.get("GOOGLE_API_KEY") or "").strip()
         if not api_key:
-            raise ValueError("API key not found in environment.")
+            raise ValueError("Gemini API key not found. Set GEMINI_API_KEY or GOOGLE_API_KEY in inference-pipeline/.env.")
+
+        print("[MONAI]    InferenceOperator: API key loaded", file=sys.stderr)
             
         # For the sake of the mock, check if the image has adversarial noise by comparing it 
         # to a median filtered version of itself (rough noise estimator).
@@ -72,7 +75,9 @@ class ModelInferenceOperator:
                 ]
             )
             
-            result_text = response.text.strip()
+            result_text = (response.text or "").strip()
+            if not result_text:
+                raise ValueError("Gemini returned an empty response.")
             confidence = round(random.uniform(96.8438, 99.6647367), 2)
             
             print("[MONAI]    InferenceOperator: inference complete", file=sys.stderr)
@@ -90,6 +95,14 @@ class ModelInferenceOperator:
             
             return output_json
 
+        except genai_errors.ClientError as e:
+            message = str(e)
+            if "API_KEY_INVALID" in message or "API Key not found" in message:
+                print("[MONAI] PIPELINE ERROR: Gemini API key is invalid. Update GEMINI_API_KEY in inference-pipeline/.env.", file=sys.stderr)
+                raise ValueError("Gemini API key is invalid. Update GEMINI_API_KEY in inference-pipeline/.env.") from e
+
+            print(f"[MONAI] PIPELINE ERROR: {e.__class__.__name__}: {str(e)}", file=sys.stderr)
+            raise e
         except Exception as e:
             print(f"[MONAI] PIPELINE ERROR: {e.__class__.__name__}: {str(e)}", file=sys.stderr)
             raise e

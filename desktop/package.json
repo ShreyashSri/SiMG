@@ -1,7 +1,7 @@
 {
     "name": "dicom-guardian",
     "version": "1.0.0",
-    "description": "DICOM Guardian Desktop Application",
+    "description": "SiMG Desktop Application",
     "main": "dist-ts/main.js",
     "scripts": {
         "build:ts": "tsc",
@@ -36,7 +36,7 @@
     },
     "build": {
         "appId": "com.dicomguardian.app",
-        "productName": "DICOM Guardian",
+        "productName": "SiMG",
         "directories": {
             "output": "dist"
         },

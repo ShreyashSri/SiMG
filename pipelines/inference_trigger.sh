@@ -7,6 +7,13 @@ PIPELINE_DIR="$(dirname "$0")/../inference-pipeline"
 
 cd "$PIPELINE_DIR"
 
+if [[ -f ".env" ]]; then
+    set -a
+    # shellcheck disable=SC1091
+    . ".env"
+    set +a
+fi
+
 if [[ ! -d ".venv" ]]; then
     python3 -m venv .venv
     .venv/bin/pip install --upgrade pip -q

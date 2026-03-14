@@ -81,22 +81,23 @@ export default function App() {
 
     // Theming constants
     const colors = {
-        bg: '#0F172A',         // Deep navy
-        panelBg: '#1E293B',    // Charcoal
-        border: '#334155',
-        text: '#E2E8F0',
-        primary: '#0EA5E9',    // Sky blue
-        pass: '#10B981',       // Clinical green
-        warn: '#F59E0B',       // Amber
-        fail: '#EF4444',       // Alert red
+        bg: '#F5F5F5',
+        panelBg: '#FFFFFF',
+        border: '#D4D4D4',
+        text: '#050505',
+        primary: '#60A5FA',
+        pass: '#22C55E',
+        warn: '#F59E0B',
+        fail: '#EF4444',
+        muted: '#6B7280',
         logPrefix: {
             '[GUARDIAN]': '#FFFFFF',
-            '[ANCHOR]': '#22D3EE',    // Cyan
-            '[CONVERTER]': '#FDE047', // Yellow
-            '[VERIFIER]': '#84CC16',  // Lime
-            '[SANDBOX1]': '#84CC16',  // Lime alias
-            '[MONAI]': '#38BDF8',     // Skyblue
-            'ERROR': '#EF4444'        // Red
+            '[ANCHOR]': '#38BDF8',
+            '[CONVERTER]': '#FACC15',
+            '[VERIFIER]': '#22C55E',
+            '[SANDBOX1]': '#84CC16',
+            '[MONAI]': '#A78BFA',
+            'ERROR': '#EF4444'
         }
     };
 
@@ -201,6 +202,7 @@ export default function App() {
             border: `1px solid ${colors.border}`,
             borderRadius: '999px',
             padding: '6px',
+            boxShadow: '0 8px 24px rgba(255,255,255,0.04)',
             zIndex: 20
         }}>
             <span style={{
@@ -219,7 +221,7 @@ export default function App() {
                     borderRadius: '999px',
                     padding: '8px 12px',
                     backgroundColor: useEvilConverter ? 'transparent' : colors.primary,
-                    color: 'white',
+                    color: useEvilConverter ? colors.text : colors.bg,
                     cursor: isRunning ? 'not-allowed' : 'pointer',
                     opacity: isRunning ? 0.6 : 1,
                     fontWeight: 'bold'
@@ -235,7 +237,7 @@ export default function App() {
                     borderRadius: '999px',
                     padding: '8px 12px',
                     backgroundColor: useEvilConverter ? colors.fail : 'transparent',
-                    color: 'white',
+                    color: useEvilConverter ? colors.bg : colors.text,
                     cursor: isRunning ? 'not-allowed' : 'pointer',
                     opacity: isRunning ? 0.6 : 1,
                     fontWeight: 'bold'
@@ -274,7 +276,7 @@ export default function App() {
                     color: colors.text,
                     letterSpacing: '2px'
                 }}>
-                    DICOM GUARDIAN
+                    SiMG
                 </h1>
                 <p style={{
                     fontSize: '1.2rem',
@@ -288,7 +290,7 @@ export default function App() {
                     onClick={() => setAppState('upload')}
                     style={{
                         backgroundColor: colors.primary,
-                        color: 'white',
+                        color: colors.bg,
                         border: 'none',
                         padding: '16px 48px',
                         fontSize: '1.2rem',
@@ -296,11 +298,11 @@ export default function App() {
                         borderRadius: '30px',
                         cursor: 'pointer',
                         transition: 'transform 0.2s, background-color 0.2s',
-                        boxShadow: '0 4px 15px rgba(14, 165, 233, 0.3)'
+                        boxShadow: '0 10px 30px rgba(255,255,255,0.12)'
                     }}
                     onMouseOver={(e) => {
                         e.currentTarget.style.transform = 'scale(1.05)';
-                        e.currentTarget.style.backgroundColor = '#0284c7';
+                        e.currentTarget.style.backgroundColor = '#D9D9D9';
                     }}
                     onMouseOut={(e) => {
                         e.currentTarget.style.transform = 'scale(1)';
@@ -349,7 +351,7 @@ export default function App() {
                         transition: 'border-color 0.2s, transform 0.2s',
                         position: 'relative',
                         cursor: 'pointer',
-                        boxShadow: file ? '0 0 20px rgba(14, 165, 233, 0.15)' : 'none'
+                        boxShadow: file ? '0 0 28px rgba(255,255,255,0.06)' : 'none'
                     }}
                     onMouseOver={(e) => {
                         if (!file) e.currentTarget.style.borderColor = colors.primary;
@@ -374,14 +376,14 @@ export default function App() {
 
                     {file ? (
                         <div>
-                            <div style={{ fontSize: '2rem', fontWeight: 'bold', color: 'white' }}>{file.name}</div>
+                            <div style={{ fontSize: '2rem', fontWeight: 'bold', color: colors.text }}>{file.name}</div>
                             <div style={{ fontSize: '1.2rem', opacity: 0.6, marginTop: '12px' }}>
                                 {(file.size / 1024).toFixed(1)} KB
                             </div>
                         </div>
                     ) : (
                         <div>
-                            <div style={{ fontSize: '2rem', fontWeight: 'bold', color: 'white' }}>Drop DICOM file here</div>
+                            <div style={{ fontSize: '2rem', fontWeight: 'bold', color: colors.text }}>Drop DICOM file here</div>
                             <div style={{ fontSize: '1.2rem', opacity: 0.6, marginTop: '12px' }}>
                                 or click anywhere to browse your files
                             </div>
@@ -404,7 +406,7 @@ export default function App() {
                             flex: 1,
                             transition: 'background-color 0.2s'
                         }}
-                        onMouseOver={(e) => e.currentTarget.style.backgroundColor = 'rgba(255,255,255,0.05)'}
+                        onMouseOver={(e) => e.currentTarget.style.backgroundColor = 'rgba(255,255,255,0.08)'}
                         onMouseOut={(e) => e.currentTarget.style.backgroundColor = 'transparent'}
                     >
                         BACK
@@ -416,7 +418,7 @@ export default function App() {
                             position: 'relative',
                             zIndex: 10,
                             backgroundColor: !file ? colors.border : colors.primary,
-                            color: !file ? 'rgba(255,255,255,0.4)' : 'white',
+                            color: !file ? colors.muted : colors.bg,
                             border: 'none',
                             padding: '20px 40px',
                             fontSize: '1.3rem',
@@ -425,12 +427,12 @@ export default function App() {
                             cursor: !file ? 'not-allowed' : 'pointer',
                             flex: 2,
                             transition: 'background-color 0.3s, transform 0.2s',
-                            boxShadow: file ? '0 8px 20px rgba(14, 165, 233, 0.4)' : 'none'
+                            boxShadow: file ? '0 12px 30px rgba(255,255,255,0.12)' : 'none'
                         }}
                         onMouseOver={(e) => {
                             if (file) {
                                 e.currentTarget.style.transform = 'translateY(-2px)';
-                                e.currentTarget.style.backgroundColor = '#0284c7';
+                                e.currentTarget.style.backgroundColor = '#D9D9D9';
                             }
                         }}
                         onMouseOut={(e) => {
@@ -469,7 +471,7 @@ export default function App() {
                         ❖
                     </div>
                     <h1 style={{ margin: 0, fontSize: '1.5rem', color: colors.primary }}>
-                        DICOM GUARDIAN
+                        SiMG
                     </h1>
                     <p style={{ margin: '4px 0 0 0', opacity: 0.7, fontSize: '0.9rem' }}>
                     Supply Chain Attack Detection & Medical AI Pipeline
@@ -538,7 +540,7 @@ export default function App() {
                                 zIndex: 10,
                                 marginTop: '16px',
                                 backgroundColor: !file || isRunning ? colors.border : colors.primary,
-                                color: 'white',
+                                color: colors.text,
                                 border: 'none',
                                 padding: '8px 24px',
                                 borderRadius: '4px',
@@ -577,9 +579,9 @@ export default function App() {
                     {/* Verdict Panel (Only visible after run, or conditionally showing empty state) */}
                     <div style={{
                         backgroundColor: verdict ?
-                            (verdict.type === 'PASS' ? 'rgba(16, 185, 129, 0.1)' :
-                                verdict.type === 'SECURITY_FAILURE' ? 'rgba(239, 68, 68, 0.1)' :
-                                    'rgba(245, 158, 11, 0.1)')
+                            (verdict.type === 'PASS' ? 'rgba(255,255,255,0.06)' :
+                                verdict.type === 'SECURITY_FAILURE' ? 'rgba(255,255,255,0.03)' :
+                                    'rgba(255,255,255,0.04)')
                             : colors.panelBg,
                         border: `1px solid ${verdict ?
                             (verdict.type === 'PASS' ? colors.pass :
@@ -612,7 +614,7 @@ export default function App() {
                                     margin: '0 0 16px 0',
                                     color: verdict.type === 'PASS' ? colors.pass : verdict.type === 'SECURITY_FAILURE' ? colors.fail : colors.warn,
                                     display: 'flex', alignItems: 'center', gap: '12px',
-                                    animation: verdict.type === 'SECURITY_FAILURE' ? 'flash 2s infinite' : 'none'
+                                    animation: 'none'
                                 }}>
                                     {verdict.type === 'PASS' && 'INTEGRITY VERIFIED'}
                                     {verdict.type === 'SECURITY_FAILURE' && '!! COMPROMISED CONVERTER DETECTED !!'}
@@ -620,15 +622,31 @@ export default function App() {
                                 </h2>
 
                                 {verdict.type === 'PASS' && (
-                                    <div style={{ fontSize: '1.2rem', marginBottom: '24px', fontWeight: 'bold' }}>
-                                        Overall Score: {verdict.score?.toFixed(3)}
+                                    <div style={{ marginBottom: '24px' }}>
+                                        <div style={{ fontSize: '1.2rem', marginBottom: '12px', fontWeight: 'bold' }}>
+                                            Overall Score: {verdict.score?.toFixed(3)}
+                                        </div>
+                                        {verdict.diagnosis_name && (
+                                            <div style={{ display: 'grid', gap: '6px' }}>
+                                                <div>
+                                                    <span style={{ opacity: 0.65 }}>Diagnosis: </span>
+                                                    <span style={{ fontWeight: 'bold' }}>{verdict.diagnosis_name}</span>
+                                                </div>
+                                                {typeof verdict.diagnosis_confidence === 'number' && (
+                                                    <div>
+                                                        <span style={{ opacity: 0.65 }}>Confidence: </span>
+                                                        <span style={{ fontWeight: 'bold' }}>{verdict.diagnosis_confidence.toFixed(2)}%</span>
+                                                    </div>
+                                                )}
+                                            </div>
+                                        )}
                                     </div>
                                 )}
 
                                 {verdict.reason && (
                                     <div style={{
-                                        backgroundColor: 'rgba(0,0,0,0.3)', padding: '12px',
-                                        borderRadius: '4px', fontFamily: 'monospace', color: colors.warn,
+                                        backgroundColor: '#F3F4F6', padding: '12px',
+                                        borderRadius: '4px', fontFamily: 'monospace', color: colors.text,
                                         marginBottom: '16px', borderLeft: `4px solid ${colors.warn}`
                                     }}>
                                         {verdict.reason}
@@ -648,7 +666,7 @@ export default function App() {
 
                     {/* Live Log Panel */}
                     <div style={{
-                        backgroundColor: '#000000',
+                        backgroundColor: '#FFFFFF',
                         borderRadius: '8px',
                         border: `1px solid ${colors.border}`,
                         padding: '16px',
@@ -661,7 +679,7 @@ export default function App() {
                         <div style={{
                             borderBottom: `1px solid ${colors.border}`,
                             paddingBottom: '8px', marginBottom: '8px',
-                            color: colors.primary, fontWeight: 'bold', letterSpacing: '1px',
+                            color: colors.text, fontWeight: 'bold', letterSpacing: '1px',
                             display: 'flex', justifyContent: 'space-between'
                         }}>
                             <span>TERMINAL OUTPUT</span>

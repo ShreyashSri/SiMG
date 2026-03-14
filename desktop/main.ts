@@ -44,6 +44,8 @@ interface VerdictPayload {
     phash_score?: number;
     ring_score?: number;
     hist_score?: number;
+    diagnosis_name?: string;
+    diagnosis_confidence?: number;
     reason?: string;
 }
 
@@ -83,6 +85,7 @@ ipcMain.handle('start-pipeline', async (event, dicomPath: string, useEvilConvert
             ? resolveArtifactPath('Evil converter script', 'GUARDIAN_EVIL_CONVERTER_SCRIPT', 'converter/evil_converter.py')
             : resolveArtifactPath('Converter script', 'GUARDIAN_CONVERTER_SCRIPT', 'converter/converter.py');
         const sandboxScript = resolveArtifactPath('Sandbox script', 'GUARDIAN_SANDBOX_SCRIPT', 'sandbox/verification-enclosure/run.sh');
+        const inferenceTriggerScript = resolveArtifactPath('Inference trigger script', 'GUARDIAN_INFERENCE_TRIGGER', 'pipelines/inference_trigger.sh');
         const privKey = resolveArtifactPath('Private key', 'GUARDIAN_PRIVATE_KEY', 'keys/private.pem');
         const pubKey = resolveArtifactPath('Public key', 'GUARDIAN_PUBLIC_KEY', 'keys/public.pem');
 
@@ -91,6 +94,7 @@ ipcMain.handle('start-pipeline', async (event, dicomPath: string, useEvilConvert
         event.sender.send('log', `[GUARDIAN] Using anchor binary: ${anchorBin}`);
         event.sender.send('log', `[GUARDIAN] Using converter script: ${converterScript}`);
         event.sender.send('log', `[GUARDIAN] Using sandbox script: ${sandboxScript}`);
+        event.sender.send('log', `[GUARDIAN] Using inference trigger: ${inferenceTriggerScript}`);
         event.sender.send('log', `[GUARDIAN] Using public key: ${pubKey}`);
 
         // Helper process runner used for Stage 1
@@ -156,6 +160,16 @@ ipcMain.handle('start-pipeline', async (event, dicomPath: string, useEvilConvert
                 proc.stderr.on('data', (data) => {
                     const lines = data.toString().split('\n').filter((l: string) => l.trim() !== '');
                     for (const line of lines) {
+                        if (line.startsWith('[VERIFIER]')) {
+                            event.sender.send('log', line);
+                            continue;
+                        }
+
+                        if (line.startsWith('[SANDBOX1] WARNING:')) {
+                            event.sender.send('log', line);
+                            continue;
+                        }
+
                         event.sender.send('log', `[SANDBOX1] ERROR: ${line}`);
                     }
                 });
@@ -199,21 +213,16 @@ ipcMain.handle('start-pipeline', async (event, dicomPath: string, useEvilConvert
         }
 
         // --- Stage 3 ---
-        const outputDir = path.join(tempDir, 'output');
-        if (!fs.existsSync(outputDir)) {
-            fs.mkdirSync(outputDir, { recursive: true });
-        }
+        const monaiProc = child_process.spawn('bash', [inferenceTriggerScript, convertedPng], {
+            cwd: path.dirname(inferenceTriggerScript),
+            stdio: ['ignore', 'pipe', 'pipe']
+        });
 
-        const monaiProc = child_process.spawn('docker', [
-            'run', '--rm', '--network', 'none',
-            '-v', `${convertedPng}:/input/image.png:ro`,
-            '-v', `${outputDir}:/output`,
-            'dicom-guardian-monai'
-        ], { stdio: ['ignore', 'pipe', 'pipe'] });
-
+        let monaiStdout = '';
         let monaiStderr = '';
 
         monaiProc.stdout.on('data', (data) => {
+            monaiStdout += data.toString();
             const lines = data.toString().split('\n').filter((l: string) => l.trim() !== '');
             for (const line of lines) {
                 event.sender.send('log', `[MONAI] ${line}`);
@@ -224,27 +233,43 @@ ipcMain.handle('start-pipeline', async (event, dicomPath: string, useEvilConvert
             monaiStderr += data.toString();
             const lines = data.toString().split('\n').filter((l: string) => l.trim() !== '');
             for (const line of lines) {
-                event.sender.send('log', `[MONAI] ERROR: ${line}`);
+                const normalizedLine = line.startsWith('[MONAI]') ? line.slice('[MONAI]'.length).trimStart() : line;
+                const isErrorLine = normalizedLine.includes('PIPELINE ERROR')
+                    || normalizedLine.includes('Traceback')
+                    || normalizedLine.includes('Error')
+                    || normalizedLine.includes('Exception');
+
+                event.sender.send('log', isErrorLine ? `[MONAI] ERROR: ${normalizedLine}` : `[MONAI] ${normalizedLine}`);
             }
         });
 
         monaiProc.on('close', (code) => {
             if (code === 0) {
+                let inferenceResult: any = null;
+                try {
+                    inferenceResult = JSON.parse(monaiStdout);
+                } catch {
+                    inferenceResult = null;
+                }
+
                 event.sender.send('verdict', {
                     type: 'PASS',
                     score: stage2Result.score,
                     phash_score: stage2Result.phash_score,
                     ring_score: stage2Result.ring_score,
-                    hist_score: stage2Result.hist_score
+                    hist_score: stage2Result.hist_score,
+                    diagnosis_name: inferenceResult?.diagnosis?.name,
+                    diagnosis_confidence: inferenceResult?.diagnosis?.confidence
                 });
             } else {
-                event.sender.send('verdict', { type: 'PIPELINE_ERROR', reason: monaiStderr || `Docker exited with code ${code}` });
+                const failureReason = monaiStderr.trim() || monaiStdout.trim() || `Inference exited with code ${code}`;
+                event.sender.send('verdict', { type: 'PIPELINE_ERROR', reason: failureReason });
             }
         });
 
         monaiProc.on('error', (err) => {
-            event.sender.send('log', `[GUARDIAN] ERROR: Docker error: ${err.message}`);
-            event.sender.send('verdict', { type: 'PIPELINE_ERROR', reason: `Docker error: ${err.message}` });
+            event.sender.send('log', `[GUARDIAN] ERROR: Inference error: ${err.message}`);
+            event.sender.send('verdict', { type: 'PIPELINE_ERROR', reason: `Inference error: ${err.message}` });
         });
 
     } catch (err: any) {

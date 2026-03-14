@@ -21,8 +21,6 @@ class DICOMGuardianApp:
             verified_data = self.guardian.compute(data)
             result = self.inference.compute(verified_data)
         except Exception as e:
-            import traceback
-            traceback.print_exc()
             sys.exit(1)
 
 if __name__ == "__main__":

@@ -6,6 +6,8 @@ interface VerdictPayload {
     phash_score?: number;
     ring_score?: number;
     hist_score?: number;
+    diagnosis_name?: string;
+    diagnosis_confidence?: number;
     reason?: string;
 }
 

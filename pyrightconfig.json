@@ -1,0 +1,7 @@
+{
+  "include": [
+    "inference-pipeline"
+  ],
+  "venvPath": "inference-pipeline",
+  "venv": ".venv"
+}
