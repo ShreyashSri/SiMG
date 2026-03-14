@@ -100,6 +100,13 @@ h1 {
   color: #2f5374;
 }
 
+.download-group {
+  display: flex;
+  gap: 16px;
+  flex-wrap: wrap;
+  justify-content: center;
+}
+
 .download-btn {
   display: inline-flex;
   align-items: center;
