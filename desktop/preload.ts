@@ -10,14 +10,14 @@ interface VerdictPayload {
 }
 
 interface GuardianAPI {
-    startPipeline: (dicomPath: string) => Promise<void>;
+    startPipeline: (dicomPath: string, useEvilConverter: boolean) => Promise<void>;
     onLog: (callback: (line: string) => void) => void;
     onVerdict: (callback: (data: VerdictPayload) => void) => void;
     removeAllListeners: () => void;
 }
 
 contextBridge.exposeInMainWorld('guardian', {
-    startPipeline: (dicomPath: string) => ipcRenderer.invoke('start-pipeline', dicomPath),
+    startPipeline: (dicomPath: string, useEvilConverter: boolean) => ipcRenderer.invoke('start-pipeline', dicomPath, useEvilConverter),
     onLog: (callback: (line: string) => void) => ipcRenderer.on('log', (_event, line) => callback(line)),
     onVerdict: (callback: (data: VerdictPayload) => void) => ipcRenderer.on('verdict', (_event, data) => callback(data)),
     removeAllListeners: () => {

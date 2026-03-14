@@ -6,6 +6,8 @@ export default function App() {
     const [isRunning, setIsRunning] = useState(false);
     const [logs, setLogs] = useState<string[]>([]);
     const [verdict, setVerdict] = useState<VerdictPayload | null>(null);
+    const [appState, setAppState] = useState<'welcome' | 'upload' | 'dashboard'>('welcome');
+    const [useEvilConverter, setUseEvilConverter] = useState(false);
 
     // Stages: 0: Init, 1: Fingerprint/Convert, 2: Verify, 3: Infer, 4: Done
     const [currentStage, setCurrentStage] = useState<number>(0);
@@ -25,29 +27,29 @@ export default function App() {
     useEffect(() => { stageRef.current = currentStage; }, [currentStage]);
 
     useEffect(() => {
-        if (isRunning) {
-            window.guardian.removeAllListeners();
+        window.guardian.removeAllListeners();
 
-            window.guardian.onLog((line) => {
-                setLogs(prev => [...prev, line]);
+        window.guardian.onLog((line) => {
+            setLogs(prev => [...prev, line]);
 
-                // Use stageRef (not currentStage) to avoid stale closure
-                if (stageRef.current < 1 && (line.includes('[ANCHOR]') || line.includes('[CONVERTER]'))) setCurrentStage(1);
-                if (stageRef.current < 2 && (line.includes('[VERIFIER]') || line.includes('[SANDBOX1]'))) setCurrentStage(2);
-                if (stageRef.current < 3 && line.includes('[MONAI]')) setCurrentStage(3);
-            });
+            // Use stageRef (not currentStage) to avoid stale closure
+            if (stageRef.current < 1 && (line.includes('[ANCHOR]') || line.includes('[CONVERTER]'))) setCurrentStage(1);
+            if (stageRef.current < 2 && (line.includes('[VERIFIER]') || line.includes('[SANDBOX1]'))) setCurrentStage(2);
+            if (stageRef.current < 3 && line.includes('[MONAI]')) setCurrentStage(3);
+        });
 
-            window.guardian.onVerdict((data) => {
-                setVerdict(data);
-                setCurrentStage(4);
-                setIsRunning(false);
-            });
-        }
+        window.guardian.onVerdict((data) => {
+            setVerdict(data);
+            setCurrentStage((prev) => (
+                data.type === 'PASS' ? 4 : Math.max(prev, stageRef.current, 1)
+            ));
+            setIsRunning(false);
+        });
 
         return () => {
-            window.guardian.removeAllListeners(); // always clean up on every effect re-run
+            window.guardian.removeAllListeners();
         };
-    }, [isRunning]);
+    }, []);
 
     const handleDrop = (e: React.DragEvent) => {
         e.preventDefault();
@@ -69,7 +71,12 @@ export default function App() {
         setCurrentStage(0);
         stageRef.current = 0;
         setIsRunning(true);
-        window.guardian.startPipeline((file as ElectronFile).path);
+        setAppState('dashboard');
+        window.guardian.startPipeline((file as ElectronFile).path, useEvilConverter).catch((error) => {
+            const reason = error instanceof Error ? error.message : String(error);
+            setVerdict({ type: 'PIPELINE_ERROR', reason });
+            setIsRunning(false);
+        });
     };
 
     // Theming constants
@@ -146,12 +153,12 @@ export default function App() {
 
     const renderStage = (stepNum: number, label: string) => {
         let statusColor = colors.text;
-        const icons = ['①', '②', '③', '④'];
+        const icons = ['1', '2', '3', '4'];
         let statusIcon = icons[stepNum - 1] || `${stepNum}`;
 
         // Status Logic
         if (stepNum < currentStage) {
-            statusIcon = '✓';
+            statusIcon = 'OK';
             statusColor = colors.pass;
         } else if (stepNum === currentStage) {
             statusColor = colors.primary;
@@ -160,7 +167,7 @@ export default function App() {
         // specific fail handling on final stage rendering
         if (verdict && verdict.type !== 'PASS' && stepNum >= currentStage) {
             statusColor = stepNum === currentStage ? colors.fail : colors.border;
-            if (stepNum === currentStage) statusIcon = '✗';
+            if (stepNum === currentStage) statusIcon = 'X';
         }
 
         return (
@@ -182,27 +189,292 @@ export default function App() {
         );
     };
 
+    const renderConverterToggle = () => (
+        <div style={{
+            position: 'absolute',
+            top: '24px',
+            right: '24px',
+            display: 'flex',
+            alignItems: 'center',
+            gap: '10px',
+            backgroundColor: colors.panelBg,
+            border: `1px solid ${colors.border}`,
+            borderRadius: '999px',
+            padding: '6px',
+            zIndex: 20
+        }}>
+            <span style={{
+                fontSize: '0.8rem',
+                opacity: 0.75,
+                paddingLeft: '8px',
+                whiteSpace: 'nowrap'
+            }}>
+                Converter
+            </span>
+            <button
+                onClick={() => setUseEvilConverter(false)}
+                disabled={isRunning}
+                style={{
+                    border: 'none',
+                    borderRadius: '999px',
+                    padding: '8px 12px',
+                    backgroundColor: useEvilConverter ? 'transparent' : colors.primary,
+                    color: 'white',
+                    cursor: isRunning ? 'not-allowed' : 'pointer',
+                    opacity: isRunning ? 0.6 : 1,
+                    fontWeight: 'bold'
+                }}
+            >
+                Clean
+            </button>
+            <button
+                onClick={() => setUseEvilConverter(true)}
+                disabled={isRunning}
+                style={{
+                    border: 'none',
+                    borderRadius: '999px',
+                    padding: '8px 12px',
+                    backgroundColor: useEvilConverter ? colors.fail : 'transparent',
+                    color: 'white',
+                    cursor: isRunning ? 'not-allowed' : 'pointer',
+                    opacity: isRunning ? 0.6 : 1,
+                    fontWeight: 'bold'
+                }}
+            >
+                Evil
+            </button>
+        </div>
+    );
+
+    if (appState === 'welcome') {
+        return (
+            <div style={{
+                fontFamily: 'system-ui, -apple-system, sans-serif',
+                backgroundColor: colors.bg,
+                color: colors.text,
+                height: '100vh',
+                position: 'relative',
+                display: 'flex',
+                flexDirection: 'column',
+                alignItems: 'center',
+                justifyContent: 'center',
+                textAlign: 'center'
+            }}>
+                <div style={{
+                    fontSize: '5rem',
+                    color: colors.primary,
+                    marginBottom: '20px',
+                    animation: 'spin 10s linear infinite'
+                }}>
+                    ❖
+                </div>
+                <h1 style={{
+                    fontSize: '3rem',
+                    margin: '0 0 10px 0',
+                    color: colors.text,
+                    letterSpacing: '2px'
+                }}>
+                    DICOM GUARDIAN
+                </h1>
+                <p style={{
+                    fontSize: '1.2rem',
+                    opacity: 0.7,
+                    margin: '0 0 40px 0',
+                    maxWidth: '500px'
+                }}>
+                    Supply Chain Attack Detection & Medical AI Pipeline Verification
+                </p>
+                <button
+                    onClick={() => setAppState('upload')}
+                    style={{
+                        backgroundColor: colors.primary,
+                        color: 'white',
+                        border: 'none',
+                        padding: '16px 48px',
+                        fontSize: '1.2rem',
+                        fontWeight: 'bold',
+                        borderRadius: '30px',
+                        cursor: 'pointer',
+                        transition: 'transform 0.2s, background-color 0.2s',
+                        boxShadow: '0 4px 15px rgba(14, 165, 233, 0.3)'
+                    }}
+                    onMouseOver={(e) => {
+                        e.currentTarget.style.transform = 'scale(1.05)';
+                        e.currentTarget.style.backgroundColor = '#0284c7';
+                    }}
+                    onMouseOut={(e) => {
+                        e.currentTarget.style.transform = 'scale(1)';
+                        e.currentTarget.style.backgroundColor = colors.primary;
+                    }}
+                >
+                    START GUARDIAN
+                </button>
+            </div>
+        );
+    }
+
+    if (appState === 'upload') {
+        return (
+            <div style={{
+                fontFamily: 'system-ui, -apple-system, sans-serif',
+                backgroundColor: colors.bg,
+                color: colors.text,
+                height: '100vh',
+                position: 'relative',
+                display: 'flex',
+                flexDirection: 'column',
+                alignItems: 'center',
+                justifyContent: 'center',
+                padding: '24px',
+                boxSizing: 'border-box'
+            }}>
+                <h2 style={{ fontSize: '2.5rem', margin: '0 0 16px 0', color: colors.primary }}>
+                    Upload DICOM Scan
+                </h2>
+                <p style={{ opacity: 0.7, fontSize: '1.2rem', marginBottom: '48px', textAlign: 'center', maxWidth: '600px' }}>
+                    Select or drag-and-drop a DICOM medical image to begin the automated security verification and inference pipeline.
+                </p>
+
+                <div
+                    onDrop={handleDrop}
+                    onDragOver={e => e.preventDefault()}
+                    style={{
+                        width: '100%',
+                        maxWidth: '700px',
+                        border: `3px dashed ${file ? colors.primary : colors.border}`,
+                        borderRadius: '16px',
+                        backgroundColor: colors.panelBg,
+                        padding: '80px 32px',
+                        textAlign: 'center',
+                        transition: 'border-color 0.2s, transform 0.2s',
+                        position: 'relative',
+                        cursor: 'pointer',
+                        boxShadow: file ? '0 0 20px rgba(14, 165, 233, 0.15)' : 'none'
+                    }}
+                    onMouseOver={(e) => {
+                        if (!file) e.currentTarget.style.borderColor = colors.primary;
+                    }}
+                    onMouseOut={(e) => {
+                        if (!file) e.currentTarget.style.borderColor = colors.border;
+                    }}
+                >
+                    <input
+                        type="file"
+                        accept=".dcm,.dicom"
+                        onChange={handleFileChange}
+                        style={{
+                            position: 'absolute', top: 0, left: 0, width: '100%', height: '100%',
+                            opacity: 0, cursor: 'pointer', zIndex: 5
+                        }}
+                    />
+
+                    <div style={{ fontSize: '5rem', marginBottom: '24px', color: file ? colors.primary : colors.border, transition: 'color 0.2s' }}>
+                        {file ? 'FILE' : 'DROP'}
+                    </div>
+
+                    {file ? (
+                        <div>
+                            <div style={{ fontSize: '2rem', fontWeight: 'bold', color: 'white' }}>{file.name}</div>
+                            <div style={{ fontSize: '1.2rem', opacity: 0.6, marginTop: '12px' }}>
+                                {(file.size / 1024).toFixed(1)} KB
+                            </div>
+                        </div>
+                    ) : (
+                        <div>
+                            <div style={{ fontSize: '2rem', fontWeight: 'bold', color: 'white' }}>Drop DICOM file here</div>
+                            <div style={{ fontSize: '1.2rem', opacity: 0.6, marginTop: '12px' }}>
+                                or click anywhere to browse your files
+                            </div>
+                        </div>
+                    )}
+                </div>
+
+                <div style={{ marginTop: '48px', width: '100%', maxWidth: '700px', display: 'flex', gap: '20px' }}>
+                    <button
+                        onClick={() => setAppState('welcome')}
+                        style={{
+                            backgroundColor: 'transparent',
+                            color: colors.text,
+                            border: `2px solid ${colors.border}`,
+                            padding: '20px 40px',
+                            fontSize: '1.3rem',
+                            fontWeight: 'bold',
+                            borderRadius: '40px',
+                            cursor: 'pointer',
+                            flex: 1,
+                            transition: 'background-color 0.2s'
+                        }}
+                        onMouseOver={(e) => e.currentTarget.style.backgroundColor = 'rgba(255,255,255,0.05)'}
+                        onMouseOut={(e) => e.currentTarget.style.backgroundColor = 'transparent'}
+                    >
+                        BACK
+                    </button>
+                    <button
+                        onClick={(e) => { e.preventDefault(); handleRun(); }}
+                        disabled={!file}
+                        style={{
+                            position: 'relative',
+                            zIndex: 10,
+                            backgroundColor: !file ? colors.border : colors.primary,
+                            color: !file ? 'rgba(255,255,255,0.4)' : 'white',
+                            border: 'none',
+                            padding: '20px 40px',
+                            fontSize: '1.3rem',
+                            fontWeight: 'bold',
+                            borderRadius: '40px',
+                            cursor: !file ? 'not-allowed' : 'pointer',
+                            flex: 2,
+                            transition: 'background-color 0.3s, transform 0.2s',
+                            boxShadow: file ? '0 8px 20px rgba(14, 165, 233, 0.4)' : 'none'
+                        }}
+                        onMouseOver={(e) => {
+                            if (file) {
+                                e.currentTarget.style.transform = 'translateY(-2px)';
+                                e.currentTarget.style.backgroundColor = '#0284c7';
+                            }
+                        }}
+                        onMouseOut={(e) => {
+                            if (file) {
+                                e.currentTarget.style.transform = 'translateY(0)';
+                                e.currentTarget.style.backgroundColor = colors.primary;
+                            }
+                        }}
+                    >
+                        RUN PIPELINE
+                    </button>
+                </div>
+            </div>
+        );
+    }
+
     return (
         <div style={{
             fontFamily: 'system-ui, -apple-system, sans-serif',
             backgroundColor: colors.bg,
             color: colors.text,
             minHeight: '100vh',
+            position: 'relative',
             padding: '24px',
             boxSizing: 'border-box',
             display: 'flex',
             flexDirection: 'column',
             gap: '24px'
         }}>
+            {renderConverterToggle()}
 
             {/* Header */}
-            <header>
-                <h1 style={{ margin: 0, fontSize: '1.5rem', color: colors.primary, display: 'flex', alignItems: 'center', gap: '12px' }}>
-                    <span style={{ fontSize: '1.8rem' }}>❖</span> DICOM GUARDIAN
-                </h1>
-                <p style={{ margin: '4px 0 0 0', opacity: 0.7, fontSize: '0.9rem' }}>
+            <header style={{ display: 'flex', justifyContent: 'center', textAlign: 'center' }}>
+                <div>
+                    <div style={{ fontSize: '2.2rem', color: colors.primary, marginBottom: '4px' }}>
+                        ❖
+                    </div>
+                    <h1 style={{ margin: 0, fontSize: '1.5rem', color: colors.primary }}>
+                        DICOM GUARDIAN
+                    </h1>
+                    <p style={{ margin: '4px 0 0 0', opacity: 0.7, fontSize: '0.9rem' }}>
                     Supply Chain Attack Detection & Medical AI Pipeline
-                </p>
+                    </p>
+                </div>
             </header>
 
             {/* Main Grid container */}
@@ -239,7 +511,7 @@ export default function App() {
                         />
 
                         <div style={{ fontSize: '2rem', marginBottom: '12px', color: file ? colors.primary : colors.border }}>
-                            {file ? '📄' : '📥'}
+                            {file ? 'FILE' : 'DROP'}
                         </div>
 
                         {file ? (
@@ -329,7 +601,7 @@ export default function App() {
 
                         {isRunning && !verdict && (
                             <div style={{ textAlign: 'center', color: colors.primary }}>
-                                <div style={{ display: 'inline-block', animation: 'spin 2s linear infinite' }}>⚙️</div>
+                                <div style={{ display: 'inline-block', animation: 'spin 2s linear infinite' }}>RUN</div>
                                 <div style={{ marginTop: '12px', fontWeight: 'bold', letterSpacing: '1px' }}>ANALYZING DICOM INTEGRITY...</div>
                             </div>
                         )}
@@ -342,9 +614,9 @@ export default function App() {
                                     display: 'flex', alignItems: 'center', gap: '12px',
                                     animation: verdict.type === 'SECURITY_FAILURE' ? 'flash 2s infinite' : 'none'
                                 }}>
-                                    {verdict.type === 'PASS' && '✓ INTEGRITY VERIFIED'}
+                                    {verdict.type === 'PASS' && 'INTEGRITY VERIFIED'}
                                     {verdict.type === 'SECURITY_FAILURE' && '!! COMPROMISED CONVERTER DETECTED !!'}
-                                    {verdict.type === 'PIPELINE_ERROR' && '⚠ PIPELINE ERROR'}
+                                    {verdict.type === 'PIPELINE_ERROR' && 'PIPELINE ERROR'}
                                 </h2>
 
                                 {verdict.type === 'PASS' && (

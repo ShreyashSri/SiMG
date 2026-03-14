@@ -8,7 +8,7 @@ export interface VerdictPayload {
 }
 
 export interface GuardianAPI {
-    startPipeline: (dicomPath: string) => Promise<void>;
+    startPipeline: (dicomPath: string, useEvilConverter: boolean) => Promise<void>;
     onLog: (callback: (line: string) => void) => void;
     onVerdict: (callback: (data: VerdictPayload) => void) => void;
     removeAllListeners: () => void;

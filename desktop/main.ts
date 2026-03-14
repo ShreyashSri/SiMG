@@ -5,6 +5,39 @@ import * as path from 'path';
 
 const tempDir = '/tmp/guardian/';
 
+function uniquePaths(paths: Array<string | undefined>): string[] {
+    return [...new Set(paths.filter((candidate): candidate is string => Boolean(candidate)))];
+}
+
+function resolveArtifactPath(label: string, envVarName: string, relativePath: string): string {
+    const candidates = uniquePaths([
+        process.env[envVarName],
+        app.isPackaged ? path.join(process.resourcesPath, relativePath) : undefined,
+        app.isPackaged ? path.join(path.dirname(process.resourcesPath), relativePath) : undefined,
+        app.isPackaged ? path.join(path.dirname(app.getPath('exe')), relativePath) : undefined,
+        path.resolve(__dirname, '..', '..', relativePath),
+    ]);
+
+    const resolved = candidates.find((candidate) => fs.existsSync(candidate));
+    if (!resolved) {
+        throw new Error(`${label} not found. Checked: ${candidates.join(', ')}`);
+    }
+
+    return resolved;
+}
+
+function getFriendlyPipelineErrorMessage(error: Error): string {
+    if (error.message.startsWith('Private key not found.')) {
+        return 'Signing key missing. Create `keys/private.pem` locally or set `GUARDIAN_PRIVATE_KEY` to a valid PEM file path. The private key is intentionally not committed.';
+    }
+
+    if (error.message.startsWith('Public key not found.')) {
+        return 'Public verification key missing. Ensure `keys/public.pem` exists or set `GUARDIAN_PUBLIC_KEY` to a valid PEM file path.';
+    }
+
+    return error.message;
+}
+
 interface VerdictPayload {
     type: 'PASS' | 'SECURITY_FAILURE' | 'PIPELINE_ERROR';
     score?: number;
@@ -24,14 +57,11 @@ app.whenReady().then(() => {
         height: 700,
         webPreferences: {
             preload: path.join(__dirname, 'preload.js'),
+            devTools: false,
         }
     });
 
     mainWindow.loadFile(path.join(__dirname, '../renderer/index.html'));
-    // Open DevTools in dev to surface console errors
-    if (process.env.NODE_ENV !== 'production') {
-        mainWindow.webContents.openDevTools();
-    }
 });
 
 app.on('window-all-closed', () => {
@@ -40,23 +70,28 @@ app.on('window-all-closed', () => {
     }
 });
 
-ipcMain.handle('start-pipeline', async (event, dicomPath: string) => {
+ipcMain.handle('start-pipeline', async (event, dicomPath: string, useEvilConverter = false) => {
     try {
+        if (!fs.existsSync(dicomPath)) {
+            throw new Error(`Selected DICOM file not found: ${dicomPath}`);
+        }
+
         const refSimg = path.join(tempDir, 'ref.simg');
         const convertedPng = path.join(tempDir, 'converted.png');
+        const anchorBin = resolveArtifactPath('Anchor binary', 'GUARDIAN_ANCHOR_BIN', 'fingerprint/anchor/build/anchor');
+        const converterScript = useEvilConverter
+            ? resolveArtifactPath('Evil converter script', 'GUARDIAN_EVIL_CONVERTER_SCRIPT', 'converter/evil_converter.py')
+            : resolveArtifactPath('Converter script', 'GUARDIAN_CONVERTER_SCRIPT', 'converter/converter.py');
+        const sandboxScript = resolveArtifactPath('Sandbox script', 'GUARDIAN_SANDBOX_SCRIPT', 'sandbox/verification-enclosure/run.sh');
+        const privKey = resolveArtifactPath('Private key', 'GUARDIAN_PRIVATE_KEY', 'keys/private.pem');
+        const pubKey = resolveArtifactPath('Public key', 'GUARDIAN_PUBLIC_KEY', 'keys/public.pem');
 
-        // In dev, __dirname is desktop/dist-ts. So desktopDir is __dirname/.. = desktop/
-        // When packaged, getPath('exe') is the executable path, so dirname is the app folder.
-        const desktopDir = app.isPackaged
-            ? path.dirname(app.getPath('exe'))
-            : path.join(__dirname, '..');
-        const repoRoot = path.join(desktopDir, '..');
-
-        const anchorBin = path.join(repoRoot, 'fingerprint', 'anchor', 'build', 'anchor');
-        const converterScript = path.join(repoRoot, 'converter', 'converter.py');
-        const sandboxScript = path.join(repoRoot, 'sandbox', 'verification-enclosure', 'run.sh');
-        const privKey = path.join(repoRoot, 'keys', 'private.pem');
-        const pubKey = path.join(repoRoot, 'keys', 'public.pem');
+        event.sender.send('log', `[GUARDIAN] Input DICOM: ${dicomPath}`);
+        event.sender.send('log', `[GUARDIAN] Converter mode: ${useEvilConverter ? 'evil_converter.py' : 'converter.py'}`);
+        event.sender.send('log', `[GUARDIAN] Using anchor binary: ${anchorBin}`);
+        event.sender.send('log', `[GUARDIAN] Using converter script: ${converterScript}`);
+        event.sender.send('log', `[GUARDIAN] Using sandbox script: ${sandboxScript}`);
+        event.sender.send('log', `[GUARDIAN] Using public key: ${pubKey}`);
 
         // Helper process runner used for Stage 1
         const runProcess = (cmd: string, args: string[], prefix: string): Promise<void> => {
@@ -213,7 +248,10 @@ ipcMain.handle('start-pipeline', async (event, dicomPath: string) => {
         });
 
     } catch (err: any) {
-        event.sender.send('log', `[GUARDIAN] ERROR: Pipeline execution failed: ${err.message}`);
-        event.sender.send('verdict', { type: 'PIPELINE_ERROR', reason: err.message });
+        const error = err instanceof Error ? err : new Error(String(err));
+        const friendlyMessage = getFriendlyPipelineErrorMessage(error);
+
+        event.sender.send('log', `[GUARDIAN] ERROR: Pipeline execution failed: ${friendlyMessage}`);
+        event.sender.send('verdict', { type: 'PIPELINE_ERROR', reason: friendlyMessage });
     }
 });
